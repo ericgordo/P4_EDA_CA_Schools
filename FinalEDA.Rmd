@@ -1,0 +1,667 @@
+---
+output: html_document
+---
+California Public School College Admission Tests Investigation 
+========================================================
+## by Eric Gordon
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set (fig.width=10, fig.height=6, fig.align='center',
+                      fig.path='Figs/',
+                      echo=FALSE, warning=FALSE, message=FALSE)
+```
+
+```{r  packages}
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+library(maps)
+library(zipcode)
+library(ggplot2)
+library(mapdata)
+library(reshape2)
+library(dplyr)
+library(plyr)
+library(tidyr)
+library(gridExtra)
+library(ggthemes)
+library(GGally)
+```
+
+```{r   Load_the_Data}
+# Load the Data
+setwd("/Users/ericgordo/Documents/Udacity/P4_EDA_Course_Materials/P4")
+#import Files as Dataframes
+act<-read.csv("act15.csv", stringsAsFactors = FALSE)
+sat<-read.csv("sat15.csv", stringsAsFactors = FALSE)
+schools<-read.csv("pubschls.csv", stringsAsFactors = FALSE)
+dropouts<-read.csv("filesdropouts.txt", sep="\t", stringsAsFactors = FALSE)
+
+# Work for the Data I want! 
+#act data Cleaning
+act <- act %>% 
+  subset (rtype=="S") %>%  
+  subset (select=-c (rtype,Enroll12,
+                   year,dname,cname,sname)) %>% #Columns to Drop
+  subset(AvgScrEng!='*' & !is.na(AvgScrEng)) %>%   #Drop Columns with NO Values
+  #Change Data Types For Numeric Columns 
+  transform (AvgScrEng=as.numeric(AvgScrEng),
+            AvgScrMath=as.numeric(AvgScrMath),
+            AvgScrRead=as.numeric(AvgScrRead), 
+            AvgScrSci=as.numeric(AvgScrSci),
+            NumGE21=as.numeric(NumGE21),
+            PctGE21=as.numeric(PctGE21)) 
+
+#SAT data cleaning
+sat<- sat %>%
+  subset (sat$rtype=="S") %>% #Only schools, not District Totals
+  subset (select=-c(rtype,enroll12,dname,cname,sname)) %>%  #Columns to Drop
+  subset (AvgScrMath!='*' & !is.na(AvgScrMath)) %>%   #Drop Columns with NO Values
+   #Change Data Types For Numeric Columns
+  transform (AvgScrRead=as.numeric (AvgScrRead),
+            AvgScrMath=as.numeric (AvgScrMath),
+            AvgScrWrite=as.numeric (AvgScrWrite),
+            PctGE1500=as.numeric (PctGE1500),
+            NumGE1500=as.numeric (NumGE1500))
+sat$AvgSum <- sat$AvgScrRead + sat$AvgScrWrite + sat$AvgScrMath #Add An Average Combined Score 
+
+#schools data cleaning
+schools <- schools%>%
+  subset (schools$StatusType=="Active") %>% #Only Active Schools
+  subset (select=c (CDSCode,County,District,
+                    School,City,
+                    Charter,Magnet,
+                    Latitude,Longitude, 
+                    EdOpsName)) # Columns to keep
+
+# Dropout Data
+dropouts <- dropouts %>%
+  subset (select=c(CDS_CODE,DTOT,ETOT))
+dropouts <- aggregate(data=dropouts,
+                      cbind(ETOT, DTOT)~CDS_CODE, sum)
+
+#Final DataFrame Creation
+school.df <- merge (act, sat, by = "cds", all=TRUE)
+school.df <- school.df %>% 
+  merge (dropouts, by.x="cds", by.y="CDS_CODE")%>%
+  merge (schools, by.x = "cds", by.y="CDSCode")
+```
+
+### The Data Being Investigated
+The data in this analysis is the accumulation of publically accessible files from the California Department of Education (CDE). These CSV files were combined to create a singular data frame containing information on 1252 California public schools, and some test score information about these schools. All of this data additionally is taken from the 2014-2015 school year. 
+
+The major data markers that we will investigate in this data is the average test scores of students in each school in both the ACT and SAT standardized tests. These tests are recognized by colleges and universities as achievement test, and for this analysis will be the measures used to comparatively measure California school achievement. In addition to these test scores, there is other information for the schools such as enrollment numbers, number of dropouts, and some categorical info like what type of school it is, if the school is a charter school, and the location information of the school. Thus there are 1295 seaperate school entires, each with the information listed above.
+
+The average total SAT score was not included by the CDE in the datasets, and thus was creates by simply adding the average values of all three SAT sections together to get the combined SAT average score. It is more difficult to compute the overall average of the ACT test, because it is not just a sum of all of the sections like the SAT, and requires raw score data to calculate. Thus the overall average ACT score is not included in this analysis. 
+
+One Final note, some schools for what could be a variety of reasons, only have data for either the SAT or the ACT but not both. Thus we will use both scores going back and forth, and talk about both tests. It was more valuable to have information on more schools, rather then cut some schools out missing information on one of the tests.
+
+# Intro Investigation into Scores
+To first investigate this data, let's examine the distribution of the test scores for the schools, to get a sense of California as a whole. Some questions I have include: 
+*How do California schools average scores compare to the National averages?*
+*What subjects ao California schools perform better on?*
+*Are there any clear trends in the scores?*
+
+## ACT
+
+```{r   ACT}
+#ACT Investigation
+ACT1 <- ggplot (data =school.df, aes(x=NumTstTakr.x)) + 
+  geom_histogram(binwidth = 10) + 
+  labs(title="ACT Test Takers")+ ylab("Count")
+ACT2 <- ggplot (data =school.df, aes(x=NumGE21)) + 
+  geom_histogram (binwidth = 15) + 
+  labs(title="Number of Students Scoring Above 21 ACT") +
+  ylab("Count")
+
+grid.arrange (ACT1, ACT2, nrow=1)
+
+#Numeric Stats 
+sum (school.df$NumTstTakr.x, na.rm = TRUE)
+sum (school.df$NumGE21, na.rm = TRUE)
+```
+
+So what we see is that 102,051 total students have ACT scores accounted for in this dataset, and of them, 58,860 scored above the average score of a 21. Additionally, the distributions show most schools have less than 100 students who took the AVT during this time. These are good notes to start with. Now we will look at each school's average score on each section of the test. 
+
+```{r  Average_ACT_Scores}
+a1 <- ggplot (data =school.df, aes(x=AvgScrEng)) + 
+  geom_histogram(binwidth = 1) + 
+  labs (title="ACT English") + ylab ("Count")
+a2 <- ggplot (data =school.df, aes(x=AvgScrRead.x)) + 
+  geom_histogram(binwidth = 1) + 
+  labs (title="ACT Reading") + ylab ("Count")
+a3 <- ggplot (data =school.df, aes(x=AvgScrMath.x)) + 
+  geom_histogram(binwidth = 1) +
+  labs(title="ACT Math")+ ylab ("Count")
+a4 <- ggplot (data =school.df, aes(x=AvgScrSci)) + 
+  geom_histogram(binwidth = 1) + 
+  labs (title="ACT Science") + ylab ("Count")
+
+grid.arrange (a1,a2,a3,a4) #2x2 plot of the different ACT Score Distributions
+```
+
+We can see that all of the average scores for the schools seem to follow fairly normal distributions. The majority of schools have a students averaging anywhere from a 15 to a 25 for each subject test in the ACT. For the Math test, there is a clear mode of the most schools having their students average a 20. These distributions make sense, because on a national scale, the ACT is standardized to be graded on a normal bell curve. That is most students will score a 21, with the same number of students scoring above a 21 as below. So in the state of California, while not perfectly normal for our public schools, it makes sense to see normal distributions. It seems that for the most part, ACT scores are very comparable to the national averages.
+
+## SAT
+Now let's take a look at SAT scores. 
+
+```{r   SAT_Test_Takers}
+SAT1 <- ggplot (data =school.df, aes(x=NumTstTakr.y)) + 
+  geom_histogram (binwidth = 10) + 
+  labs (title="SAT Test Takers") + 
+  ylab("Number of SChools")
+
+SAT2 <- ggplot (data =school.df, aes(x=NumGE1500)) + 
+  geom_histogram (binwidth = 10) + 
+  labs (title="Number of Students Scoring Above 21 ACT")+
+  ylab ("Number of SChools")    
+
+grid.arrange (SAT1, SAT2, nrow=1)
+
+#Numeric Stats
+sum (school.df$NumTstTakr.y, na.rm = TRUE)
+sum (school.df$NumGE1500, na.rm = TRUE)
+```
+Compared to the ACT, 208,323 students are accounted for in this data with 92,619 of them scoring above the national average of 1500. This is a much larger number of students who took the SAT, but a much smaller percentage of students who scored above average in California. This should be very interesting moving forward. Let's Now look at the score distributions.
+
+```{r   SAT_SCORES}
+# SAT
+b1 <- ggplot (data =school.df, aes(x=AvgScrRead.y))+ 
+  geom_histogram(binwidth = 10) + 
+  labs(title="SAT Reading")+ ylab("Count")
+
+b2 <- ggplot (data =school.df, aes(x=AvgScrWrite))+ 
+  geom_histogram (binwidth = 10)+ 
+  labs (title="SAT Writing")+ ylab("Count")
+
+b3 <- ggplot (data =school.df, aes(x=AvgScrMath.y))+ 
+  geom_histogram (binwidth = 10)+ 
+  labs (title="SAT Math")+ ylab("Count")
+
+b4 <- ggplot (data =school.df, aes(x=AvgSum))+ 
+  geom_histogram (binwidth = 20)+ 
+  labs (title="SAT Total")+ ylab ("Count")
+
+grid.arrange (b1,b2,b3,b4)   #2 x 2 Grid of the different SAT Score Distributions
+```
+
+Similarly to the ACT scores, there is a somewhat normal distribution of schools average test scores for their students. One noticeable difference with these distributions though, is that the most common scores for all of the scores (including the Average Total Scores) is that the peak frequencies of the distributions are below the averages. The average national score of each SAT section is 500, and clearly schools in California have student test scores below average. This clearly shows that students in California seem to do slightly better on the ACT than the SAT. School averages were higher on the ACT compared to the SAT. This is very interesting! 
+
+## Other Info
+Finally let's look at some of the other info from our data.
+
+```{r   Other_Info}
+print ("Type of Schools")
+table (school.df$EdOpsName)  #The Types of Schools
+print ("Number of Charters")
+table (school.df$Charter)  #Number of Charters
+print ("Number of Magnets")
+table (school.df$Magnet)
+```
+
+Here are some more numbers about our dataset, seeing that we have 212 charter schools, and 147 magnet schools. Not surprisingly, the vast majority of schools are labeled as traditional, with the next common being "Alternative School of Choice." We will delve into some of these categorical labels in further investigation.
+
+# Comparing Variables and Relationships
+Now that we have seen some distributions of individual values in our dataset, lets start to compare these values with each other. In order to first just take a glimpse of comparing all of the data, we will use the GGPairs function to plot multiple scatterplots at once. I wonder:
+*What values are correlated?*
+*Can we create any models for variable relationships?*
+*Are there any trends that we can see to assess the quality of individual schools?*
+
+```{r   GGPairs}
+#GG Pairs Plot to Help with more depth. 
+ggpairs (school.df[c("NumGE1500",
+                     "NumTstTakr.x","AvgScrRead.x",
+                     "AvgScrMath.x","AvgScrWrite",
+                     "AvgSum","NumTstTakr.y",
+                     "AvgScrEng","AvgScrRead.y",
+                     "AvgScrMath.y","AvgScrSci",
+                     "NumGE21","ETOT","DTOT"
+                     )],
+         label="none", axisLabels = "internal")
+```
+
+After examining this grid of scatter plots and correlations, some interesting results are worth noting. First, there does in fact seem to be some highly linear correlations in this data, and some of these we will investigate further. Second, there are some high correlations in the upper right hand boxes, stating that there can be some correlation between different variables, specifically average scores for the schools. 
+
+## SAT Comparing Subjects
+The SAT does a significant job in making distinctions between sections of its tests, seemingly making it crucial to show that students have different abilities in different fields of study. The average score of students for students for each section does not seem to be random though.
+
+```{r   SAT_Comparing_Subjects}
+read_vs_math <- ggplot (data =school.df, 
+                        aes(x=AvgScrRead.y,y=AvgScrMath.y)) + 
+  geom_point(alpha=3/4,size=3/4) + 
+  labs(title="SAT Reading vs. Math") 
+
+read_vs_math + geom_text (data=subset(school.df, 
+                                      AvgScrRead.y<350 & AvgScrMath.y>430), 
+                          aes(label=School), 
+                          size=2.5, nudge_y = -5.5)
+```
+
+The average score of a student math scores at a school seems to be directly relational on the average reading section score of the school. Even though these are very distinct subjects, it seems highly relational the average scores of these two subjects seems to go hand and hand at different schools. This is to say, there are few to no schools that excel in one of these subjects and not the other. One outlier to this was labeled in the plot, that seemed to have a much higher math average than reading average. The name of the school is included though, because "International High School" may show that they serve a large population of students from diverse backgrounds (possibly explaining the low English reading score). So this school may actually be well aware of their own status as an outlier.  
+This graph seems either make it clear that a school either does well in preparing students for both subjects of Math and Reading, or that these two aspects of the SAT are highly related. That is the skills it takes to do well on one section of the test actually are the same as the other, even though they are different "subjects." 
+
+Because of this clear relationship, it is worth adjusting the graph to go further. First, I want to make marks breaking up the average scores so that there are 4 quadrants to compare schools to the average. Additionally, because of the clear relationship, let's add a linear regression to this graph. 
+
+```{r   With_Trendlines}
+read_vs_math + geom_hline (yintercept =500, linetype=3) + 
+  geom_vline(xintercept = 500, linetype=3) +
+  stat_smooth(method = "lm")
+```
+
+While the linear model above is good, it is interesting to create a model to predict a school's average SAT Math Score based on its average writing and reading score. Let's Create this model and evaluate it. 
+
+```{r Linear Model_Creation}
+score_model <- lm (data=school.df, 
+                   AvgScrMath.y ~ AvgScrRead.y +AvgScrWrite
+                   )
+summary(score_model)
+score_model
+```
+
+To test this model, we will use the actual averages from one specific school. 
+
+```{r Test_a_Value}
+Agoura <- data.frame (AvgScrRead.y=571, AvgScrWrite=573)
+
+modelEstimate = predict(
+  score_model, newdata = Agoura,
+  interval="prediction", level = .95)
+
+modelEstimate
+print (subset (school.df, 
+               School=="Agoura High")$AvgScrMath.y)
+```
+
+Our model put the predicted Math score to be about 591, while the school actually had an average of 576. Our model came close, and the 95% confidence level actually included this value. So while our model is not perfect, it actually can give us a very good sense of what a school's average math score could be simply based on the schools reading and writing scores. I am sure other models to predict different sections would also work, however we will not dive into these models in this analysis. 
+
+## Does Drop Out Culture Effect Scores? 
+```{r  Dropouts_vs_Scores}
+d1 <- ggplot (data =subset (school.df, !is.na(PctGE1500)), 
+              aes(x=PctGE1500, y=DTOT)) + 
+  geom_point()+ 
+  labs(title="DropOuts Vs. High Scoring SAT")+ 
+  ylab("Number of Dropouts")
+
+d2 <- ggplot (data =subset(school.df, 
+                           !is.na(NumGE21)),
+              aes(x=PctGE21, y=DTOT))+ 
+  geom_point()+ 
+  labs(title="DropOuts Vs. High Scoring ACT")+ 
+  ylab("Number of Dropouts")
+
+grid.arrange(d1,d2)
+```
+```{r total_dropouts, fig.width=5, fig.height=3}
+ggplot (data =subset (school.df, school.df$DTOT >0),
+        aes(x=ETOT, y=DTOT))+ 
+  geom_point()+ 
+  labs(title="DropOuts Vs. Enrollment")+ 
+  ylab("Dropouts")
+```
+
+
+In the graphs, there is clearly one school that had an astronomical amount of dropouts, that must be due to some extreme cause to make this school an outlier. Otherwise though, there does not seem to be a clear trend of more students dropping out leading to a lower percentage of students who score above average. This is surprising, because I would assume that a culture of dropping out would correlate to a culture of student underachievement on a test, but I am glad to be shown otherwise, that students can persevere even in a school culture highlighted with students dropping out. 
+
+## Above Average Students Across Tests
+Now let's compare students across test. Earlier we noted that students seemed to do worse (compared to the national average) on the SAT than the ACT, so lets continue to delve on this issue. 
+
+```{r   Number_of_Each}
+ggplot (data =school.df, 
+        aes(x=NumGE21,y=NumGE1500))+ 
+  geom_point(alpha=3/4,size=3/4)
+```
+
+Clearly there is a relationship between the number of students who will score high on one test at a school, either SAT or ACT, and the number of students who will score well on the other test. While my initial thought was that this must just be because larger schools will have more students scoring above average on both test because they simply have more students who can, this graph shows that there is NOT a clear linear correlation between total enrollment and the number of students who will score above average on the SAT.
+
+```{r   Number_of_Each_With_lm}
+ggplot (data =school.df, aes(x=ETOT,y=NumGE1500))+ 
+  geom_point(alpha=3/4,size=3/4)
+```
+
+Thus it is interesting to see that schools do not seem to prepare students for simply one of the two tests, but instead seem to either prepare students to do well both all tests, or not. 
+
+## Average Test Scores
+Now let's look at averages.
+
+```{r  Average_Test}
+ggplot (data =school.df, aes(x=PctGE21,y=PctGE1500)) + 
+  geom_point(alpha=3/4, size=3/4)+
+  ylab("% Above Average SAT")+
+  xlab("% Above Average ACT")+ 
+  geom_hline(yintercept =50, linetype=3) + 
+  geom_vline(xintercept = 50, linetype=3)
+
+print("Percent of Students Above 21")
+summary(school.df$PctGE21)
+print("Percent of Students Above 1500")
+summary(school.df$PctGE1500)
+```
+
+Graphically again, we can see that California students seems to be higher performing on the ACT than the SAT. There are only a handful of schools that were above average on the SAT but below average on the ACT (the top left quadrant), while clearly there are many schools that scored above average on the ACT but not the SAT. Also, looking at what percent of a school's student body scores above a 21, California has a median value of 53.85 and mean of 51.85, thus most scores have more than halve of their student body scoring above average on the ACT. 
+This graph is vital in this analysis, because it is clear some schools do better in preparing their students for the ACT and SAT than others. We will therefore use a high average on both of these test as a quantifier as a successfull school. At the same time, if a school averages student SAT and ACT below the average, this school will be assessed as a less than average school. 
+This Graph will be worth further investigating with more layers, especially trying to target what types of schools are likely to be in each part of this graph.
+
+# Further Variable Investigations
+Again, let's look further at the performance of schools, and see if we can find any further factors that are relational to a schools scores on these standardized tests. Now I want to see if:
+*Can we find further groupings of schools with average test scores?*
+*Can we find geographical trends of school performance?*
+*Do certain types of schools, or locations of schools correlate to performance?*
+
+```{r   Charter_Schools}
+averages <- ggplot(data =school.df,
+                   aes(x=PctGE21,y=PctGE1500, color=color))+ 
+  geom_point(alpha=3/4,size=3/4) + 
+  geom_hline(yintercept =50, linetype=3) +
+  geom_vline(xintercept = 50, linetype=3)
+
+color <- school.df$Charter
+averages + scale_color_manual (
+  values=c("#CCCCCC", "#0000CC"))
+```
+
+This Chart highlighted charter schools as blue points, with non charter schools as grey, and it is fascinating to see so many charter schools in the lower left quarter of this graph. This graph is worth noting, and is one of the most interesting findings so far in this analysis. I will return to this ploy at the end of our investigation.
+
+## County Average Scores
+Now let's look at the same averages with a different categorical variable colored. 
+
+```{r   Counties}
+color <- school.df$County
+averages
+```
+
+There are way too many counties on this graph to even make meaning from. We can see some green on the bottom left, and some other colors here and there. So instead of looking further into this graph, let's cut down these counties to only the major urban centers of California, to see if there are clearer trends.
+
+```{r   Only_Urban_Counties}
+urban_counties <- c("Alameda","Orange",
+                    "Contra Costa","Los Angeles",
+                    "Riverside","Sacramento",
+                    "San Bernardino","San Diego",
+                    "San Francisco","San Mateo",
+                    "Santa Clara","Ventura")
+
+city.schools <- subset (school.df, County %in% urban_counties)
+
+ggplot(data =city.schools, 
+       aes(x=PctGE21,y=PctGE1500, color=County))+ 
+  geom_point(alpha=3/4, size=3/4)+ 
+  geom_hline(yintercept =50, linetype=3) +
+  geom_vline(xintercept = 50, linetype=3)
+
+```
+
+It seems that Santa Clara county has a lot of schools scoring very high on both tests, having most of their students above average on these tests. Sadly, also it seems that Los Angeles has a lot of schools occupying the bottom left quadrant of having few students who score above average on either test. This is seen more clearly below:
+
+```{r   Los_Angeles}
+city.schools$highlight <- ifelse (
+  city.schools$County ==
+    "Los Angeles", "Los Angeles School", "Other")
+
+ggplot (data =city.schools,
+        aes(x=PctGE21,y=PctGE1500, color=highlight))+ 
+  geom_point(alpha=3/4, size=3/4)+ 
+  geom_hline(yintercept =50, linetype=3) + 
+  geom_vline(xintercept = 50, linetype=3)+ 
+  scale_color_manual(values= c(
+    "Los Angeles School" = "red", "Other" = "grey50"))
+```
+
+While Los Angeles has a lot of scores with few percentage of students scoring above average on each test, clearly they have schools that are located throughout the scatterplot as well. It just seems that they also have a large population of schools that have few students who score above average. Let's look further into these urban counties to see if we can have a better comparison of the schools. 
+
+```{r   Urban_County_Spreads}
+e1 <- ggplot (data =city.schools, 
+              aes(x=County, y=PctGE21))+
+  geom_boxplot() + 
+  theme(legend.position="none")
+e2 <- ggplot (data =city.schools,
+              aes(x=County, y=PctGE1500)) + 
+  geom_boxplot()+ 
+  theme(legend.position="none")
+
+grid.arrange(e1,e2)
+```
+
+Now we can see clearly that schools in each of these urban centers varies greatly. This graph we will investigate further at the end, but now let's see if we can see visually see these trends more, by plotting the schools on a map. 
+
+# California Map Investigations
+While labeling and talking about these counties is great, visually seeing the spread of schools on a map may help provide further insights. First, let's look at school performance just on the ACT. 
+
+```{r   Act_Scores_on_the_Map}
+usa <- map_data ("state")
+ca <- subset (usa, usa$region=="california")
+
+#Basic Map for California
+CA.MAP <- ggplot()+ 
+  geom_polygon(data=ca, aes(x=long, y=lat),fill="Grey")+ 
+  coord_fixed(1.3)+
+  theme(panel.background =element_rect(fill ="white"))
+
+#PCT GE21 Heat Map
+CA.ACT <- CA.MAP + 
+  geom_point(data=school.df,
+             aes(x=Longitude,y=Latitude, colour=PctGE21),size=1/3)+
+  scale_color_gradientn(
+    colours = colorRampPalette(c("Red", "Blue"))(10))
+
+CA.ACT
+```
+
+This map shows schools that have more students performing above average on the ACT in Blue, with less students performing above average in Red. We can see that there are some pockets of red, in the central valley, around Los Angeles, and possibly in San Diego, but there are also blue dots, or high performing schools, scattered almost everywhere. 
+Instead of percent of students who score above average, now let's just see the heat map of students average total scores. We will have to switch to the SAT, because we have data on the average total scores, so let's see how this map looks.
+
+```{r   SAT_Map}
+# AVG SAT total Heat map
+CA.SAT <- CA.MAP +
+  geom_point (data=school.df,
+             aes (x=Longitude,y=Latitude, colour=AvgSum),size=1/3)+ 
+  scale_color_gradientn (
+    colours = colorRampPalette(c("Red","Purple" ,"Blue"))(10))
+
+CA.SAT
+```
+
+As we can see on this map, it seems like there are a couple of clusters of schools averaging high SAT scores, in the southern part of the Bay Area, Northern part of San Diego, and possibly on the southern and northern outskirts of Los Angeles. Two of these areas we will investigate in one second. Before we leave this map of the entire region of California though, it is worth identifying where the schools with the greatest dropout rates are. Thus for the next plot, we will only plot schools that had more than 50 dropouts during the 2014-2015 school year. Also, the outlier school that had a dropout of 739 was omitted to identify more schools with dropout issues. 
+
+```{r   Dropout_Locations}
+#Drop Out Totals
+CA.DTOT <- CA.MAP +  
+  geom_jitter (data=subset(school.df,
+                           DTOT>=50 & DTOT<700),
+               aes(x=Longitude,y=Latitude, colour=DTOT), size=1/10) +
+  scale_color_gradientn(
+    colours = colorRampPalette(c( "purple", "Red"))(10))
+
+CA.DTOT
+```
+
+This map shows us some trouble locations where schools have high numbers of students dropping out (50 or more in one year). The Los Angeles area, East Bay Area, and then other schools scattered throughout the center (East/West) of the state seem to be the locations of schools with high dropout numbers. We will get a closer view of two of these areas in the next graphs.
+
+# San Francisco Bay Area and Los Angeles
+Finally, it is worth investigating two major urban centers in California, San Francisco and Los Angeles. We will look at the same three traits for schools in these areas: the percentage of students scoring above average on ACT, the average total SAT, and the number of dropouts.
+
+## Bay Area
+```{r  San_Francisco}
+bay_area <- ca %>%
+  subset(lat>37.2 & lat<38.5) %>%
+  subset(long>(-123) & long<(-121))
+
+bay_area.schools <- school.df %>%
+  subset(Latitude>37.2 & Latitude<38) %>%
+  subset(Longitude>(-122.7) & Longitude<(-122))
+
+sf <- ggplot()+ geom_polygon(
+  data=bay_area, aes(x=long, y=lat), fill="Light Blue")+ 
+  coord_fixed(1.3)+
+  theme(panel.background = element_rect(fill = "White"))
+
+sf1 <- sf + geom_point (data=bay_area.schools, 
+                       aes(x=Longitude,y=Latitude, colour=PctGE21),size=3/4)+
+  scale_color_gradientn(
+    colours = colorRampPalette(c("Red", "Blue"))(10))
+
+sf2 <- sf+ geom_point (data=bay_area.schools, 
+                       aes(x=Longitude,y=Latitude, colour=AvgSum),size=3/4)+
+  scale_color_gradientn(
+    colours = colorRampPalette(c("Red","Purple" ,"Blue"))(10))
+
+sf3 <- sf +  geom_jitter(data=subset(
+  bay_area.schools, DTOT>=50 & DTOT<700),
+  aes(x=Longitude,y=Latitude, colour=DTOT))+
+  scale_color_gradientn(
+    colours = colorRampPalette(c( "purple", "Red"))(10))
+
+grid.arrange(sf1, sf2, sf3, nrow=2)
+```
+```{r  SF_Stats}
+print("Percent of Students above average ACT")
+summary(bay_area.schools$PctGE21)
+print("Average SAT Total at School")
+summary(bay_area.schools$AvgSum)
+print("Number of Dropouts per School")
+summary(bay_area.schools$DTOT)
+```
+
+The three plots above show that schools south of San Francisco, in the southern suburbs of San Francisco, seem cluster more above average schools, that are colored blue in the first two graphs. Additionally, all of the schools with large dropout issues seem to be in the east Bay. Schools North of San Francisco, in Marin County, all seem to achieve well on the SAT and ACT. So it seems clear that the geographical features of the Bay Area have a significant influence on the performance of schools. Location seems to be very pivotal for the performance of the public schools. 
+
+## Los Angeles
+Let's look at the Los Angeles Area:
+
+```{r  LA}
+la <- ca %>%
+  subset(lat>33.5 & lat<35) %>%
+  subset(long>(-120) & long<(-117))
+
+la.schools <- school.df %>%
+  subset(Latitude>34 & Latitude<35) %>%
+  subset(Longitude>(-120) & Longitude<(-117))
+
+LA.MAP <- ggplot()+ 
+  geom_polygon(data=la, 
+               aes(x=long, y=lat), fill="light blue")+ 
+  coord_fixed(1.3)+
+  theme(panel.background = element_rect(fill = "white"))
+
+la1 <- LA.MAP+ 
+  geom_point(data=la.schools,
+             aes(x=Longitude,y=Latitude, colour=PctGE21),size=1/2)+
+  scale_color_gradientn(
+    colours = colorRampPalette(c("Red", "Blue"))(10))+
+  theme(panel.background = element_rect(fill = "white"))
+
+la2<-LA.MAP +
+  geom_point(data=la.schools, 
+             aes(x=Longitude,y=Latitude, colour=AvgSum),size=1/2 )+
+  scale_color_gradientn(
+    colours = colorRampPalette(c("Red", "Blue"))(10))+
+  theme(panel.background = element_rect(fill = "white"))
+
+la3<- LA.MAP +  
+  geom_jitter(data=subset(la.schools, DTOT>=50 & DTOT<700),
+              aes(x=Longitude,y=Latitude, colour=DTOT),size=1/2)+
+  scale_color_gradientn(
+    colours = colorRampPalette(c( "purple", "Red"))(10))
+
+grid.arrange(la1, la2, la3, nrow=2)
+```
+
+```{r  la_stats}
+print("Percent of Students above average ACT")
+summary(la.schools$PctGE21)
+print("Average SAT Total at School")
+summary(la.schools$AvgSum)
+print("Number of Dropouts per School")
+summary(la.schools$DTOT)
+```
+
+While obviously have a lot of schools in a small area, Los Angeles seems to have a highly clustered area of schools that have low test scores in the SAT and the ACT. There are also schools throughout the map that are blue, or have above average scores, however it is worth noting the median school has only 40 percent of their students scoring above average on the ACT. The area also as shown in the third plot has  a lot of schools high numbers of students dropping out. These graphs seem to paint a picture of Los Angeles public schools differently than the San Francisco area.
+Exploring the schools geographically throughout California was very interesting, and really brought some insight to the location of high performing schools throughout California, and in two Urban Centers.
+
+------
+
+## Final Plots and Summary
+Throughout this analysis, there were investigations into several ideas brought to life in this data, but wrapping up there were three major graphs that seemed to be very insightful from this data set. 
+
+### Charter Schools vs Students Scoring Above Average
+
+```{r  Plot_One}
+ggplot(data =school.df, 
+                   aes(x=PctGE21,y=PctGE1500, color= school.df$Charter))+
+  geom_point( alpha=3/4, size=3/4) + 
+  geom_hline(yintercept =50, linetype=3) +
+  geom_vline(xintercept = 50, linetype=3)+
+  scale_color_manual( values=c("#CCCCCC", "#0000CC"))+
+  labs(color="Charter") +
+  xlab("% Students Scoring Above ACT 21")+
+  ylab("% Students Scoring Above SAT 1500")
+
+#Getting Som Stat
+both <- subset (school.df,
+                !is.na(PctGE21) & !is.na(PctGE1500)) 
+q1 <- subset (both, 
+              PctGE21<50 & PctGE1500<50)
+
+print("Are Schools That Fall Below Avg For Both Tests Charters?")
+table(q1$Charter)
+print("How Many are Charters on Entire Plot?")
+table(both$Charter)
+```
+
+The recent expansion of charter schools through out the country has seemed to bring lively debate in current events for individuals in the field of education, but here it seemed to be clear that there were a lot of charter schools that had the majority of their students score below average in both the SAT and the ACT. Looking at the specific numbers now, of the 125 charter schools that had both scores recorded for the ACT and SAT, 74 of them had less than 50% of their students performing above average on either tests. This is surprising, because many of these charter schools do not seem to be showing results that they get their students to score above average on college entrance exams. This is shocking, because charter schools are advertised and often considered to be alternatives to offer a better educational outcome than a traditional public school. However, according to this success metric, charter schools do not seem to be outperforming other public scores in this comparison. This scatterplot really just shows that a title like "Charter School" may not having a uniform effect, but truly schools can vary greatly, and need to be examined an evaluated on a case by case basis. 
+
+### Urban Test Score Distributions
+
+```{r   Plot_Two}
+e1 <- ggplot (data =city.schools, 
+              aes(x=County, y=PctGE21, fill=County)) + 
+  geom_boxplot() + 
+  theme(legend.position="none") + 
+   ylab("% Students Scoring Above ACT 21")
+
+e2 <- ggplot(data =city.schools,
+             aes(x=County, y=PctGE1500, fill=County)) + 
+  geom_boxplot()+ 
+  theme(legend.position="none") + 
+   ylab("% Students Scoring Above SAT 1500")
+
+grid.arrange(e1,e2)
+```
+
+The urban centers throughout California also seem to greatly differ on their student tests averages. Counties like San Mateo, Ventura, Orange and Santa Clara all have their median school reporting that well over half of their students scoring above the national average on both the SAT and the ACT. Then when you look at the Los Angeles county, the median school reports that only about 40% of its students score above average on the ACT, and only around 20% of the students earn above average marks on the SAT. While the Los Angeles county has a large range of schools, as seen by the long boxplots, it still is tough to state that the middle performing school, is still not having many of their students score above average. There are also interesting insights you can draw from each of these urban counties, but I just wanted to highlight the contrast between different counties in the same state. 
+
+### Maps of California
+
+```{r   Plot_Three}
+grid.arrange (CA.ACT + labs (title="% of Students Above Avg. (ACT)", color="%Students >21")+
+                 xlab("Longitude")+
+                ylab("Latitude"), 
+              CA.SAT + labs (title="Avg. Overall SAT", color="Avg. SAT Sum")+ 
+                xlab("Longitude")+
+                ylab("Latitude"), 
+              CA.DTOT + labs(title="Schools with High Dropouts", color="# of Dropouts")+
+                xlab("Longitude")+
+                ylab("Latitude"), 
+              ncol=2, layout_matrix=cbind(c(1,1),c(2,3)))
+```
+
+For California, a very large state, it is hard to generalize results for the entire state, but instead it is vital to compare geographical regions. As noticed earlier, the geography of the San Francisco Bay Area led to noticeable locations where schools seemed to perform differently depending on what part of the Bay you looked at. Thus in general, it was absolutely to talk about this Data throughout the entire analysis with the crucial identification of where these counties and locations are. There is a large variety of school performance as seen on the first two maps, with some schools having close to or all of their students performing above average on the SAT, and averaging very high combined SAT scores. As seen on the third map, the clear area that is marked with high dropout rates the Los Angeles area, followed by the East Bay of San Francisco.
+
+------
+
+# Reflection
+The purpose of this analysis was to investigate college entrance test scores of different schools throughout the state of California now even knowing what to expect. However several interesting and unique trends showed themselves, that could never have been predicted. Observations, like schools in California seeming to have a much higher percentages of students scoring above average on the ACT compared to the SAT were very revealing. Additionally, the high correlation of SAT tests scores was shocking across schools, truly making you wonder what is being tested in the SAT sections, why they are so separated, even though a clear correlation between and across the subjects can be seen. 
+One difficulty of this analysis was deciding what data to include and how to string it all together. All of this data was found online at the California Department of Education's website, along with many other files containing other interesting data. Once it was settled to use two major college entrance exams, the graphs and plots used to investigate the data almost started to seem obvious to graph. 
+One of the major assumptions, and potential limitations, of this entire analysis was that the ACT and SAT are valid tools to measure school performance. On the one side, the ACT and SAT test are used nationwide and thus can help evaluate the state of to draw conclusions about the state as a whole. But on the other hand, theses test are designed to draw comparisons between students, and thus the scores are standardized so that they follow a normal curve. With these tests, therefore, there will always be students who score lower than others, to create a normal distribution. Schools for this reason are almost being judged against each other with these metrics to rank them, instead of having a measurement where all students could highly achieve. The California Assessment of Student Performance and Progress (CAASPP) could have been used for this analysis instead, because it is an assessment used to measure districts performances and individual student outcomes. This test, however, was newly implemented in 2014, and I was only able to find data publically available for the district level, not the individual school level. Thus these ACT and SAT scores allowed for a larger, richer, dataset of all of the high schools in California, and in my opinion still managed to lead to some very informative discoveries. Possibly future work could be focused on including non comparative data, in the future when more CAASPP data is allowed. 
+
+# Work Cited
+All data used in this analysis found at:
+http://www.cde.ca.gov/ds/
+
+Definition of "Urban" Counties:
+http://www.urbancounties.com/about/board/
+
+General RStudio TroubleShooting
+
+https://www.udacity.com/course/data-analysis-with-r--ud651 
+
+http://stackoverflow.com/ 
+
+http://www.cookbook-r.com/ 
+
+https://www.r-bloggers.com/
