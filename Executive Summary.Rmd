@@ -86,7 +86,7 @@ school.df <- school.df %>%
 setwd("/Users/ericgordo/Documents/Udacity/P4_EDA_Course_Materials/P4/P4_EDA_CA_Schools")
 ```
 
-**This is an abbreviated version of this project. To read or access thefull report, click [pdf file](https://github.com/ericgordo/P4_EDA_CA_Schools/blob/master/FinalEDA.pdf) or [HTML File](https://github.com/ericgordo/P4_EDA_CA_Schools/blob/master/FinalEDA.html)**
+**This is an abbreviated version of this project. To read or access files from the full report, click [here](https://github.com/ericgordo/P4_EDA_CA_Schools)**
 
 This project, takes college entrance exam data from California Public Schools to explore, analyze, and find interesting insights into the scope of public education in the nation's largest populated state. 
 
