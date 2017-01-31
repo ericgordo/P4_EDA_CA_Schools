@@ -136,7 +136,7 @@ print (subset (school.df,
 ```
 Our model put the predicted Math score to be about 591, while the school actually had an average of 576. Our model came close, and the 95% confidence level actually included this value. So while our model is not perfect, it actually can give us a very good sense of what a school's average math score could be simply based on the school's reading and writing scores. 
 
-What is worth noting is how highly correlated the seaperate sections of the SAT are, basically shwoing that these sections may not be as seaperate and unique as one may think. 
+What is worth noting is how highly correlated the seaperate sections of the SAT are, basically showing that these sections may not be as seaperate and unique as one may think. 
 
 
 ## Students Scoring Above Average on Both Tests, and Charter Schools
@@ -172,13 +172,46 @@ print("ACT Summary Charters")
 tapply(school.df$PctGE21, school.df$Charter, summary)
 print("SAT Summary Charters")
 tapply(school.df$PctGE1500, school.df$Charter, summary)
+
+charters <- subset(both, both$Charter=='Y')
+non_charters <- subset(both, both$Charter=='N')
 ```
 
 There is a clear strong correlation between the percentage of students who will score above a 21 on the ACT, and the percent of students who will score above a 1500 on the SAT, as seen on the red line on the graph and the 0.93 calculated correlation. This graph shows that at a particular school, roughly the same percentage of students score above average on both the SAT and ACT, not just one or the other. 
 
 Also, as we can see from the red trend line, the summary stats, and the points themselves on the graph, students seem to achieve overall at higher rates in California on the ACT versus the SAT. The median percent of students scoring above average at a single school on the ACT was 53%, versus only 37% for the SAT.
 
-Another aspect of this graph that is vital is the coloring of Charter schools and Non-Charter schools. The recent expansion of charter schools through out the country has seemed to bring lively debate in the field of education, but here it seemed to be clear that there were a lot of charter schools that had the majority of their students score below average in both the SAT and the ACT. Looking at the specific numbers now, of the 125 charter schools that had both scores recorded for the ACT and SAT, 74 of them had less than 50% of their students performing above average on either tests. Additionally, the mean of non-charter schools on the ACT was around 53% of students scoring above average with a median of 54%, while charter schools only having  a mean of 39% and median of 34%. The numbers for SAT are a little bit lower, but again show normal public schools with a higher percentage of students scoring above average in both the mean and median.
+Another aspect of this graph that is vital is the coloring of Charter schools and Non-Charter schools. The recent expansion of charter schools through out the country has seemed to bring lively debate in the field of education, but here it seemed to be clear that there were a lot of charter schools that had the majority of their students score below average in both the SAT and the ACT. Looking at the specific numbers now, of the 125 charter schools that had both scores recorded for the ACT and SAT, 74 of them had less than 50% of their students performing above average on either tests. Additionally, the mean of non-charter schools on the ACT was around 53% of students scoring above average with a median of 54%, while charter schools only having  a mean of 39% and median of 34%. 
+
+Below, I will run a statistcal test to see if this mean difference is statistically significant. That is we will test the following questions with the given hypothesis. 
+
+Do public school students have higher test scores than charter school students? 
+
+$H_o =$ *There is not difference in test score means*
+
+$H_a =$ *There is a difference in test score mans*
+
+```{r  echo=TRUE, Charter_Stats_Test}
+#ACT
+x1 <- charters$PctGE21
+y1 <- non_charters$PctGE21
+
+#SAT
+x2 <- charters$PctGE1500
+y2 <- non_charters$PctGE1500
+
+print("ACT Statistical Difference")
+shapiro.test(x1)
+shapiro.test(y1)
+wilcox.test(y1, x1, conf.int=TRUE)
+
+print("SAT Statistical Difference")
+shapiro.test(x2)
+shapiro.test(y2)
+wilcox.test(x2, y2, conf.int=TRUE)
+```
+
+As the results show, there is a statistical significance in test score means for both the students scoring above average on the ACT, and students scoring above average on the SAT. The Wilcoxon-Mann-Whitney test was used because none of the distributions were normal. 
 
 Many of these California charter schools therefore do not seem to be showing results that they get their students to score above average on college entrance exams. This is shocking, because charter schools are advertised and often considered to be alternatives to offer a better educational outcome than a traditional public school. However, according to this success metric, charter schools do not seem to be outperforming other public scores in this comparison, but instead seem to be underperorming the state averages. This scatterplot really just shows that a title like "Charter School" may not having a uniform effect, but truly schools can vary greatly, and need to be examined an evaluated on a case by case basis. 
 
