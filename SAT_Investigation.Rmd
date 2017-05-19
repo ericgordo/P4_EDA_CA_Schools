@@ -86,18 +86,16 @@ school.df <- school.df %>%
 setwd("/Users/ericgordo/Documents/Udacity/P4_EDA_Course_Materials/P4/P4_EDA_CA_Schools")
 ```
 
-**To read or access files from this full investigation, click [here](https://github.com/ericgordo/P4_EDA_CA_Schools)**
+**This Analysis is jsut a portion of the entire investigation into this data. To read or access files from this full investigation, click [here](https://github.com/ericgordo/P4_EDA_CA_Schools)**
 
-This analysis compares schools accross the state of Calfiornia. Specifically, at each school I investigate the number of students who score above average on the SAT and ACT academic tests. The average score of the SAT is a 1500, and the average score on the ACT test is 21. 
+This analysis compares schools across the state of California. Specifically, it looks at the percent of students who score above the national average on the SAT and ACT standardized tests. The average score of the SAT is a 1500, and the average score on the ACT test is 21.
 
 ### The Data Investigated
-The data in this analysis is the collection of publically accessible files from the California Department of Education (CDE). This data combines the average test scores from 1,252 California public schools. All of this data is recorded from the 2014-2015 school year. 
-
-There are many interesting insights to be noted about this data, and for a full report follow one of the links mentioned above.
+The data in this analysis is the collection of publicly accessible files from the California Department of Education (CDE). This data combines the average test scores from 1,252 California public schools from the 2014-2015 school year.
 
 ## Percent of Students who Score Above Average on Each Test
 
-Each point on the chart below represents a seperate school. The X axis postion of the point represents the perecent of students at the school who scored above average on the ACT, while the Y axis position represents the percent of students scoring above average on the SAT. Thus the schools in the top right corner have more students who score above average on both tests, while the bottom left corner represents schools in which the smallest percent of students perform above average on each test. The orange points represent traditional public schools, and the blue dots represent charter schools.
+Each point on the chart below represents a school. The X axis position of each point represents the percent of students at the school who scored above average on the ACT, while the Y axis position represents the percent of students scoring above average on the SAT. Thus the schools in the top right corner have more students who score above average on both tests, while the bottom left corner represents schools in which the smallest percent of students perform above average on each test. The orange points represent traditional public schools, and the blue dots represent charter schools.
 
 ```{r  Plot_One}
 ggplot(data =school.df, 
@@ -113,7 +111,7 @@ ggplot(data =school.df,
 
 ```
 
-The graph above shows that schools vary in what percent of students perform above average on both tests. However there seems to be a disparity between the charter schools and traditional pulic schools. Let's investigate some stats.
+The graph above shows the vast difference between schools in the percent of students performing above average on both tests. However there seems to be a disparity between the charter schools and traditional public schools. Let's investigate some stats.
 
 ## Further Statistics
 
@@ -136,13 +134,13 @@ charters <- subset(both, both$Charter=='Y')
 non_charters <- subset(both, both$Charter=='N')
 ```
 
-There are 125 charter schools on the graph above, and 945 traditional public schools. The stats above also show that on average, 40% of students score above average on the SAT at a traditional public school, while only 33% of students at Charter schools score above average. Similarly for the ACT, 53% of students perform above average at every public school, compared to 39.6% at charter schools. 
+The outputs above show us several things. First, that there are 125 charter schools on the graph above, and 945 traditional public schools. Also from the “SAT Percent Breakdown”, we see that at the average public school 40% of students score above average on the SAT, while only 33% of students at the average charter schools score above average. Similarly for the ACT, 53% of students perform above average at every public school, compared to just 39.6% at charter schools. We will investigate this further to see if we can draw any statistically significant conclusions from this data.
 
-## Statistic Tests for Significance
+## Statistical Tests for Significance
 
-To determine the significance of this difference, we can run a statistcal test to see if the mean number of students who score above average on the SAT and ACT is statistically difference. That is we will test the following questions with the given hypothesis. 
+We will run a statistical test to see if the mean percent of students who score above average on the SAT and ACT is statistically different between public schools and private schools. That is we will test the following question.
 
-Do public schools have a higher percentage of students who score above average than charter schools? 
+*Is there a significant difference in the percentage of students who score above average on these tests in public vs. charter schools?*
 
 $H_o =$ *There is no difference in the percent of students who score above average on this test*
 
@@ -166,14 +164,15 @@ wilcox.test(y1, x1, conf.int=TRUE)
 wilcox.test(x2, y2, conf.int=TRUE)
 ```
 
-The results above show that there is statistical significance difference in the percent of students who score above average in both tests at public schools compared to charter schools. This can be seen in the small p-values from both tests above. The Wilcoxon-Mann-Whitney test was used because none of the distributions were normal. 
+The results above show that there is statistically significant difference in the percent of students who score above average in both tests at public schools compared to charter schools. This can be seen in the small p-values from both tests above. The Wilcoxon-Mann-Whitney test was used because none of the distributions were normal.
 
-Many of these California charter schools therefore do not seem to be showing results that they get their students to score above average on college entrance exams. This is shocking, because charter schools are advertised and often considered to be alternatives to offer a better educational outcome than a traditional public school. However, according to this success metric, charter schools do not seem to be outperforming other public scores in this comparison, but instead seem to be underperorming the state averages. This scatterplot really just shows that a title like "Charter School" may not having a uniform effect, but truly schools can vary greatly, and need to be examined an evaluated on a case by case basis. 
+## Conclusion
 
+It is interesting that for the 2014-2015 school year, there was a statistically significant difference between the number of students who score above average on both the SAT and ACT tests. This may be surprising, or shocking to many, however there may be further questions worth investigating to see why this result may happen. It is possible that other variables in these schools like the size of schools has a large effect on these results. For the  scope of this investigation, I will leave this analysis here, and recommend that further investigations look into reasons why this result may have occurred. 
 
-## Conclution
-
-Below are some maps of the locations of schools throughout the state of California, as well as a color corosponding to some statistic of each school. 
+# Work Cited
+All data used in this analysis found at:
+http://www.cde.ca.gov/ds/
 
 ```{r   Plot_Three}
 usa <- map_data ("state")
@@ -193,14 +192,3 @@ CA.ACT <- CA.MAP +
 
 CA.ACT + labs (title="% of Students Above Avg. (ACT)")
 ```
-
-
-# Further Work
-This Report was just a small sample of the data investigated. For the full report, with deeper data examination as well as a more robust conclusions, please follow the link at the top of the page. 
-
-# Work Cited
-All data used in this analysis found at:
-http://www.cde.ca.gov/ds/
-
-Definition of "Urban" Counties:
-http://www.urbancounties.com/about/board/
