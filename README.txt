@@ -1,5 +1,8 @@
 
-[Click Here To Read the Executive Summary](http://htmlpreview.github.io/?https://github.com/ericgordo/P4_EDA_CA_Schools/blob/master/Executive_Summary.html "Report Summary")
+[Click Here To Read the Executive Summary](http://htmlpreview.github.io/?https://github.com/ericgordo/P4_EDA_CA_Schools/blob/master/Executive_Summary.html)
+
+[Sites Using React](https://github.com/facebook/react/wiki/Sites-Using-React)
+
 
 This project is an exploratory analysis on publicly found data on California schools. There is no political interests, but instead was just an exploration of my own curiosity. For the final full report, please read the FinalEDA.pdf or FinalEDA.html files. For a shorter, abbreviated report, please read the ExecutiveSummary.html file which can be read with proper image rendering here: 
 
